@@ -1,11 +1,12 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.db import get_connection
 from app.models.poisson import TeamStrength, predict_match
+from app.services.team_features import build_team_features
 
-app = FastAPI(title="FootPredict API", version="0.1.0")
+app = FastAPI(title="FootPredict API", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -20,12 +21,27 @@ class PredictionRequest(BaseModel):
     home_team_id: str
     away_team_id: str
     league_id: str | None = None
-    home_attack: float = Field(gt=0)
-    home_defense: float = Field(gt=0)
-    away_attack: float = Field(gt=0)
-    away_defense: float = Field(gt=0)
-    home_advantage: float = Field(default=1.0, gt=0)
     model_version_id: str | None = None
+
+
+def prediction_response(prediction, saved):
+    return {
+        "prediction_id": str(saved[0]),
+        "match_id": str(saved[1]),
+        "created_at": saved[2],
+        "prediction": {
+            "lambda_home": prediction.lambda_home,
+            "lambda_away": prediction.lambda_away,
+            "prob_home": prediction.prob_home,
+            "prob_draw": prediction.prob_draw,
+            "prob_away": prediction.prob_away,
+            "prob_over_25": prediction.prob_over_25,
+            "prob_under_25": prediction.prob_under_25,
+            "prob_btts_yes": prediction.prob_btts_yes,
+            "prob_btts_no": prediction.prob_btts_no,
+            "most_likely_score": prediction.most_likely_score,
+        },
+    }
 
 
 @app.get("/health")
@@ -59,22 +75,52 @@ def list_matches(limit: int = 20):
 
 @app.post("/predict")
 def create_prediction(payload: PredictionRequest):
-    prediction = predict_match(
-        home_team=payload.home_team_id,
-        away_team=payload.away_team_id,
-        home_strength=TeamStrength(
-            attack=payload.home_attack,
-            defense=payload.home_defense,
-            home_advantage=payload.home_advantage,
-        ),
-        away_strength=TeamStrength(
-            attack=payload.away_attack,
-            defense=payload.away_defense,
-        ),
-    )
-
     with get_connection() as conn:
         with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, name, short_name, country,
+                       elo_rating, attack_rating, defense_rating, home_advantage
+                FROM teams
+                WHERE id IN (%s, %s)
+                """,
+                (payload.home_team_id, payload.away_team_id),
+            )
+            rows = cur.fetchall()
+
+            if len(rows) != 2:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Une ou deux équipes sont introuvables dans Neon",
+                )
+
+            by_id = {str(row[0]): row for row in rows}
+            home_row = by_id.get(payload.home_team_id)
+            away_row = by_id.get(payload.away_team_id)
+
+            if not home_row or not away_row:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Les équipes domicile/extérieur sont introuvables dans Neon",
+                )
+
+            home_features = build_team_features(home_row)
+            away_features = build_team_features(away_row)
+
+            prediction = predict_match(
+                home_team=home_row[1],
+                away_team=away_row[1],
+                home_strength=TeamStrength(
+                    attack=home_features.attack,
+                    defense=home_features.defense,
+                    home_advantage=home_features.home_advantage,
+                ),
+                away_strength=TeamStrength(
+                    attack=away_features.attack,
+                    defense=away_features.defense,
+                ),
+            )
+
             cur.execute(
                 """
                 INSERT INTO predictions (
@@ -98,7 +144,8 @@ def create_prediction(payload: PredictionRequest):
                 WHERE m.home_team_id = %s
                   AND m.away_team_id = %s
                   AND (%s IS NULL OR m.league_id = %s)
-                ORDER BY m.kickoff_at DESC
+                  AND m.kickoff_at >= now()
+                ORDER BY m.kickoff_at ASC
                 LIMIT 1
                 RETURNING id, match_id, created_at
                 """,
@@ -127,26 +174,10 @@ def create_prediction(payload: PredictionRequest):
     if not saved:
         raise HTTPException(
             status_code=404,
-            detail="No matching fixture found for the supplied teams/league",
+            detail="Aucun match à venir trouvé pour ces deux équipes",
         )
 
-    return {
-        "prediction_id": str(saved[0]),
-        "match_id": str(saved[1]),
-        "created_at": saved[2],
-        "prediction": {
-            "lambda_home": prediction.lambda_home,
-            "lambda_away": prediction.lambda_away,
-            "prob_home": prediction.prob_home,
-            "prob_draw": prediction.prob_draw,
-            "prob_away": prediction.prob_away,
-            "prob_over_25": prediction.prob_over_25,
-            "prob_under_25": prediction.prob_under_25,
-            "prob_btts_yes": prediction.prob_btts_yes,
-            "prob_btts_no": prediction.prob_btts_no,
-            "most_likely_score": prediction.most_likely_score,
-        },
-    }
+    return prediction_response(prediction, saved)
 
 
 @app.get("/teams/search")
@@ -187,7 +218,6 @@ def upcoming_matches(limit: int = 20):
                 FROM matches m
                 JOIN teams ht ON ht.id = m.home_team_id
                 JOIN teams at ON at.id = m.away_team_id
-                LEFT JOIN leagues l ON l.id = m.league_id
                 WHERE m.kickoff_at >= now()
                   AND m.status IN ('scheduled', 'upcoming')
                 ORDER BY m.kickoff_at ASC
