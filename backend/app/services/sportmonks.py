@@ -87,7 +87,11 @@ def _upsert_team(cur, participant: dict, league_id: str | None) -> str:
         """
         INSERT INTO teams (name, short_name, country, league_id, external_id)
         VALUES (%s, %s, %s, %s, %s)
-        ON CONFLICT (id) DO NOTHING
+        ON CONFLICT (external_id) DO UPDATE SET
+            name = EXCLUDED.name,
+            short_name = EXCLUDED.short_name,
+            country = EXCLUDED.country,
+            league_id = EXCLUDED.league_id
         """,
         (name, short_name, country, league_id, external_id),
     )
@@ -108,7 +112,7 @@ def ingest_fixtures(
 ) -> dict:
     path = f"fixtures/between/{start_date}/{end_date}"
     params = {
-        "include": "participants;scores;league",
+        "include": "participants;scores;league;state",
         "per_page": 100,
     }
     if league_id is not None:
