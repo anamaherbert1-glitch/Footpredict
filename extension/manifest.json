@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "FootPredict",
-  "version": "1.0.0",
-  "description": "Analyse des probabilités et value bets sur Melbet & 1xBet",
+  "version": "1.1.0",
+  "description": "Analyse probabiliste de matchs de football avec moteur FootPredict.",
   "permissions": [
     "activeTab",
     "scripting",
@@ -13,7 +13,8 @@
     "*://*.melbet.com/*",
     "*://*.1xbet.com/*",
     "*://*.1xbet.fr/*",
-    "*://*.1xbet.bet/*"
+    "*://*.1xbet.bet/*",
+    "http://localhost:8000/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -34,16 +35,6 @@
     "default_path": "sidebar/sidebar.html"
   },
   "action": {
-    "default_title": "Ouvrir FootPredict",
-    "default_icon": {
-      "16": "icons/icon16.png",
-      "48": "icons/icon48.png",
-      "128": "icons/icon128.png"
-    }
-  },
-  "icons": {
-    "16": "icons/icon16.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
+    "default_title": "Ouvrir FootPredict"
   }
 }

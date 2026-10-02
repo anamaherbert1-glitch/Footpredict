@@ -1,1 +1,57 @@
-placeholder
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>FootPredict</title>
+  <link rel="stylesheet" href="sidebar.css">
+</head>
+<body>
+  <main>
+    <header>
+      <div><strong>FootPredict</strong><span>Prediction Engine</span></div>
+      <button id="refresh" title="Actualiser">↻</button>
+    </header>
+    <section class="status" id="status">Connexion à l'API…</section>
+    <section class="card">
+      <h2>Match détecté</h2>
+      <div class="teams">
+        <input id="homeTeam" placeholder="Équipe domicile">
+        <span>VS</span>
+        <input id="awayTeam" placeholder="Équipe extérieure">
+      </div>
+      <p class="muted" id="source">Détection automatique ou saisie manuelle.</p>
+    </section>
+    <section class="card">
+      <h2>Paramètres du modèle</h2>
+      <div class="grid">
+        <label>Attack domicile<input id="homeAttack" type="number" step="0.01" value="1.10"></label>
+        <label>Defense domicile<input id="homeDefense" type="number" step="0.01" value="0.90"></label>
+        <label>Attack extérieur<input id="awayAttack" type="number" step="0.01" value="0.95"></label>
+        <label>Defense extérieur<input id="awayDefense" type="number" step="0.01" value="1.05"></label>
+      </div>
+      <button class="primary" id="predict">Analyser le match</button>
+    </section>
+    <section class="card hidden" id="result">
+      <h2>Probabilités</h2>
+      <div class="probabilities">
+        <div><b id="pHome">—</b><span>Domicile</span></div>
+        <div><b id="pDraw">—</b><span>Nul</span></div>
+        <div><b id="pAway">—</b><span>Extérieur</span></div>
+      </div>
+      <div class="metrics">
+        <div>Over 2.5 <b id="pOver">—</b></div>
+        <div>BTTS <b id="pBtts">—</b></div>
+        <div>Score <b id="score">—</b></div>
+      </div>
+      <p class="muted">Les probabilités sont des estimations du modèle, pas une garantie de résultat.</p>
+    </section>
+    <section class="card settings">
+      <h2>API</h2>
+      <input id="apiUrl" placeholder="http://localhost:8000">
+      <button id="saveApi">Enregistrer l'URL API</button>
+    </section>
+  </main>
+  <script src="sidebar.js"></script>
+</body>
+</html>
