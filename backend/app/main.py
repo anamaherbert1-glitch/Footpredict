@@ -147,3 +147,54 @@ def create_prediction(payload: PredictionRequest):
             "most_likely_score": prediction.most_likely_score,
         },
     }
+
+
+@app.get("/teams/search")
+def search_teams(q: str, limit: int = 10):
+    q = q.strip()
+    if len(q) < 2:
+        raise HTTPException(status_code=400, detail="Search query must contain at least 2 characters")
+    limit = min(max(limit, 1), 25)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, name, short_name, country, league_id,
+                       elo_rating, attack_rating, defense_rating, home_advantage
+                FROM teams
+                WHERE name ILIKE %s OR short_name ILIKE %s
+                ORDER BY name
+                LIMIT %s
+                """,
+                (f"%{q}%", f"%{q}%", limit),
+            )
+            rows = cur.fetchall()
+            columns = [d.name for d in cur.description]
+    return [dict(zip(columns, row)) for row in rows]
+
+
+@app.get("/matches/upcoming")
+def upcoming_matches(limit: int = 20):
+    limit = min(max(limit, 1), 100)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT m.id, m.kickoff_at, m.status,
+                       m.home_team_id, ht.name AS home_team,
+                       m.away_team_id, at.name AS away_team,
+                       m.league_id, l.name AS league
+                FROM matches m
+                JOIN teams ht ON ht.id = m.home_team_id
+                JOIN teams at ON at.id = m.away_team_id
+                LEFT JOIN leagues l ON l.id = m.league_id
+                WHERE m.kickoff_at >= now()
+                  AND m.status IN ('scheduled', 'upcoming')
+                ORDER BY m.kickoff_at ASC
+                LIMIT %s
+                """,
+                (limit,),
+            )
+            rows = cur.fetchall()
+            columns = [d.name for d in cur.description]
+    return [dict(zip(columns, row)) for row in rows]
