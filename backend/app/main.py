@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from app.db import get_connection
 from app.models.poisson import TeamStrength, predict_match
 from app.services.team_features import build_team_features
+from app.services.sportmonks import SportMonksError, ingest_fixtures
 
 app = FastAPI(title="FootPredict API", version="0.2.0")
 
@@ -51,6 +52,26 @@ def health():
             cur.execute("SELECT 1")
             cur.fetchone()
     return {"status": "ok", "database": "connected"}
+
+
+class IngestRequest(BaseModel):
+    start_date: str
+    end_date: str
+    league_id: int | None = None
+    season: str | None = None
+
+
+@app.post("/ingest/sportmonks/fixtures")
+def ingest_sportmonks_fixtures(payload: IngestRequest):
+    try:
+        return ingest_fixtures(
+            start_date=payload.start_date,
+            end_date=payload.end_date,
+            league_id=payload.league_id,
+            season=payload.season,
+        )
+    except SportMonksError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @app.get("/matches")
